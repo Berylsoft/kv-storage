@@ -1,11 +1,15 @@
 use rusqlite::{Connection, ffi, params};
 use std::path::Path;
 
+pub const VERSION: i64 = 1;
+
 #[derive(Debug)]
 pub enum Error {
     Rusqlite(rusqlite::Error),
     Invariant(&'static str),
     DuplicateKey(rusqlite::Error),
+    Version { exp: i64, cur: i64 },
+    Ident { exp: Box<[u8]>, cur: Box<[u8]> },
 }
 
 impl From<rusqlite::Error> for Error {
@@ -91,16 +95,71 @@ fn set_synchronous(conn: &Connection) -> Result<()> {
 }
 
 fn init_schema(conn: &Connection) -> Result<()> {
-    let schema = "CREATE TABLE IF NOT EXISTS kv_storage (
+    let metadata_schema = "CREATE TABLE IF NOT EXISTS metadata (
+        id INTEGER PRIMARY KEY,
+        version INTEGER NOT NULL,
+        ident BLOB NOT NULL,
+        check (id = 1)
+    );";
+    let storage_schema = "CREATE TABLE IF NOT EXISTS kv_storage (
         domain BLOB NOT NULL,
         key BLOB NOT NULL,
         value BLOB NOT NULL,
         PRIMARY KEY (domain, key)
     ) WITHOUT ROWID;";
     check_if_updated_rows_zero(
-        conn.execute(schema, []),
-        "init schema updated_rows not 0",
+        conn.execute(metadata_schema, []),
+        "init metadata schema updated_rows not 0",
+    )?;
+    check_if_updated_rows_zero(
+        conn.execute(storage_schema, []),
+        "init stroage schema updated_rows not 0",
     )
+}
+
+struct Metadata {
+    version: i64,
+    ident: Box<[u8]>,
+}
+
+fn write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
+    let mut stmt = conn.prepare("SELECT * FROM metadata WHERE id = 1")?;
+    let mut metadata_iter = stmt.query_map([], |row| {
+        Ok(Metadata {
+            version: row.get(1)?,
+            ident: row.get(2)?,
+        })
+    })?;
+    match metadata_iter.next() {
+        None => {
+            let updated_rows = conn.execute(
+                "INSERT INTO metadata (version, ident) VALUES (?, ?)",
+                params![VERSION, ident],
+            )?;
+            if updated_rows != 1 {
+                return Err(Error::Invariant("write_metadata updated_rows not 1"));
+            }
+        }
+        Some(cur) => {
+            let cur = cur?;
+            if VERSION != cur.version {
+                return Err(Error::Version {
+                    exp: VERSION,
+                    cur: cur.version,
+                });
+            }
+            if ident != cur.ident.as_ref() {
+                return Err(Error::Ident {
+                    exp: ident.into(),
+                    cur: cur.ident,
+                });
+            }
+        }
+    }
+    if metadata_iter.next().is_some() {
+        return Err(Error::Invariant("more than 1 rows in metadata table"));
+    }
+    Ok(())
 }
 
 fn filter_error_duplicate_key(err: rusqlite::Error) -> Error {
@@ -120,7 +179,7 @@ pub struct WriteContext {
 }
 
 impl WriteContext {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>, ident: &[u8]) -> Result<Self> {
         register_cksumvfs()?;
         let conn = Connection::open(path)?;
         set_reserve_bytes(&conn)?;
@@ -128,6 +187,7 @@ impl WriteContext {
         set_synchronous(&conn)?;
         ensure_checksum_enabled(&conn)?;
         init_schema(&conn)?;
+        write_metadata(&conn, ident)?;
         Ok(Self { conn })
     }
 
