@@ -1,4 +1,5 @@
 use std::path::Path;
+pub use rusqlite;
 use rusqlite::{Connection, ffi, params};
 use crc32fast::hash as crc32;
 
