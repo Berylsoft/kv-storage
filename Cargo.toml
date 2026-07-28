@@ -1,10 +1,10 @@
 [package]
-name = "kv_storage"
+name = "kv-storage"
 version = "0.1.0"
 edition = "2024"
 authors = ["stackinspector"]
 license = "MPL-2.0"
-repository = "https://github.com/Berylsoft/kv_storage"
+repository = "https://github.com/Berylsoft/kv-storage"
 
 [lib]
 name = "kv_storage"
