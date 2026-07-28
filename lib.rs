@@ -10,6 +10,8 @@ pub enum Error {
     DuplicateKey(rusqlite::Error),
     Version { exp: i64, cur: i64 },
     Ident { exp: Box<[u8]>, cur: Box<[u8]> },
+    #[cfg(feature = "actor")]
+    ActorClosed,
 }
 
 impl From<rusqlite::Error> for Error {
@@ -174,11 +176,11 @@ fn filter_error_duplicate_key(err: rusqlite::Error) -> Error {
     }
 }
 
-pub struct WriteContext {
+pub struct Writer {
     conn: Connection,
 }
 
-impl WriteContext {
+impl Writer {
     pub fn open(path: impl AsRef<Path>, ident: &[u8]) -> Result<Self> {
         register_cksumvfs()?;
         let conn = Connection::open(path)?;
@@ -206,4 +208,14 @@ impl WriteContext {
             Err(err) => Err(filter_error_duplicate_key(err)),
         }
     }
+
+    pub fn close(self) -> Result<()> {
+        match self.conn.close() {
+            Ok(()) => Ok(()),
+            Err((_conn, err)) => Err(err.into()),
+        }
+    }
 }
+
+#[cfg(feature = "actor")]
+pub mod actor;

@@ -16,3 +16,8 @@ path = "main.rs"
 
 [dependencies]
 rusqlite = { git = "https://github.com/Berylsoft/rusqlite-cksumvfs", version = "0.40.1-cksumvfs", features = ["bundled", "blob", "cksumvfs"] }
+bytes = { version = "1", optional = true }
+actor-core = { git = "https://github.com/Berylsoft/actor", optional = true }
+
+[features]
+actor = ["bytes", "actor-core"]
