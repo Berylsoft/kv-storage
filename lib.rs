@@ -15,7 +15,7 @@ const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
 const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
     domain BLOB NOT NULL,
     key BLOB NOT NULL,
-    value_crc32 BLOB NOT NULL,
+    value_crc32 INTEGER NOT NULL,
     value BLOB NOT NULL,
     PRIMARY KEY (domain, key)
 ) WITHOUT ROWID;";
@@ -199,7 +199,7 @@ impl Writer {
     }
 
     pub fn write_kv(&self, domain: &[u8], key: &[u8], value: &[u8]) -> Result<()> {
-        let value_crc32 = crc32(value).to_be_bytes();
+        let value_crc32 = crc32(value);
         let result = self.conn.execute(
             "INSERT INTO storage (domain, key, value_crc32, value) VALUES (?, ?, ?, ?)",
             params![domain, key, value_crc32, value],
