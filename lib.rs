@@ -3,11 +3,13 @@ pub use rusqlite;
 use rusqlite::{Connection, ffi, params};
 use crc32fast::hash as crc32;
 
+pub const MAGIC: i32 = 0x42654b56; // BeKV
+const SET_MAGIC_STMT: &str = "PRAGMA application_id=0x42654b56;";
 pub const VERSION: u32 = 1;
+const SET_VERSION_STMT: &str = "PRAGMA user_version=1;";
 
 const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
     id INTEGER PRIMARY KEY,
-    version INTEGER NOT NULL,
     ident BLOB NOT NULL,
     check (id = 1)
 );";
@@ -25,6 +27,7 @@ pub enum Error {
     Rusqlite(rusqlite::Error),
     Invariant(&'static str),
     DuplicateKey(rusqlite::Error),
+    NotABeKVDatabase,
     Version { exp: u32, cur: u32 },
     Ident { exp: Box<[u8]>, cur: Box<[u8]> },
     #[cfg(feature = "actor")]
@@ -113,6 +116,47 @@ fn set_synchronous(conn: &Connection) -> Result<()> {
     )
 }
 
+fn check_if_database_is_new(conn: &Connection) -> Result<bool> {
+    let count: u32 = conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type='table';", [],
+        |r| r.get(0),
+    )?;
+    Ok(count == 0)
+}
+
+fn check_or_write_version(conn: &Connection) -> Result<()> {
+    let magic: i32 = conn.query_row(
+        "PRAGMA application_id;", [],
+        |r| r.get(0),
+    )?;
+    let version: u32 = conn.query_row(
+        "PRAGMA user_version;", [],
+        |r| r.get(0),
+    )?;
+    let database_is_new = check_if_database_is_new(conn)?;
+    match (magic, version, database_is_new) {
+        (0, 0, true) => {
+            check_if_updated_rows_zero(
+                conn.execute(SET_MAGIC_STMT, []),
+                "set magic updated_rows not 0",
+            )?;
+            check_if_updated_rows_zero(
+                conn.execute(SET_VERSION_STMT, []),
+                "set version updated_rows not 0",
+            )
+        }
+        (MAGIC, VERSION, false) => {
+            Ok(())
+        }
+        (MAGIC, cur_version, false) => {
+            Err(Error::Version { exp: VERSION, cur: cur_version })
+        }
+        _ => {
+            Err(Error::NotABeKVDatabase)
+        }
+    }
+}
+
 fn init_schema(conn: &Connection) -> Result<()> {
     check_if_updated_rows_zero(
         conn.execute(METADATA_SCHEMA, []),
@@ -125,23 +169,21 @@ fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 struct Metadata {
-    version: u32,
     ident: Box<[u8]>,
 }
 
-fn write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
+fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
     let mut stmt = conn.prepare("SELECT * FROM metadata WHERE id = 1")?;
     let mut metadata_iter = stmt.query_map([], |row| {
         Ok(Metadata {
-            version: row.get(1)?,
-            ident: row.get(2)?,
+            ident: row.get(1)?,
         })
     })?;
     match metadata_iter.next() {
         None => {
             let updated_rows = conn.execute(
-                "INSERT INTO metadata (version, ident) VALUES (?, ?)",
-                params![VERSION, ident],
+                "INSERT INTO metadata (ident) VALUES (?)",
+                params![ident],
             )?;
             if updated_rows != 1 {
                 return Err(Error::Invariant("write_metadata updated_rows not 1"));
@@ -149,12 +191,6 @@ fn write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
         }
         Some(cur) => {
             let cur = cur?;
-            if VERSION != cur.version {
-                return Err(Error::Version {
-                    exp: VERSION,
-                    cur: cur.version,
-                });
-            }
             if ident != cur.ident.as_ref() {
                 return Err(Error::Ident {
                     exp: ident.into(),
@@ -193,8 +229,9 @@ impl Writer {
         run_vacuum(&conn)?;
         set_synchronous(&conn)?;
         ensure_checksum_enabled(&conn)?;
+        check_or_write_version(&conn)?;
         init_schema(&conn)?;
-        write_metadata(&conn, ident)?;
+        check_or_write_metadata(&conn, ident)?;
         Ok(Self { conn })
     }
 
