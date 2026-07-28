@@ -1,0 +1,18 @@
+[package]
+name = "kv_storage"
+version = "0.1.0"
+edition = "2024"
+authors = ["stackinspector"]
+license = "MPL-2.0"
+repository = "https://github.com/Berylsoft/kv_storage"
+
+[lib]
+name = "kv_storage"
+path = "lib.rs"
+
+[[bin]]
+name = "kv_storage"
+path = "main.rs"
+
+[dependencies]
+rusqlite = { git = "https://github.com/Berylsoft/rusqlite-cksumvfs", version = "0.40.1-cksumvfs", features = ["bundled", "blob", "cksumvfs"] }
