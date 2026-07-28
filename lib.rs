@@ -3,7 +3,7 @@ pub use rusqlite;
 use rusqlite::{Connection, ffi, params};
 use crc32fast::hash as crc32;
 
-pub const VERSION: i64 = 1;
+pub const VERSION: u32 = 1;
 
 const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
     id INTEGER PRIMARY KEY,
@@ -25,7 +25,7 @@ pub enum Error {
     Rusqlite(rusqlite::Error),
     Invariant(&'static str),
     DuplicateKey(rusqlite::Error),
-    Version { exp: i64, cur: i64 },
+    Version { exp: u32, cur: u32 },
     Ident { exp: Box<[u8]>, cur: Box<[u8]> },
     #[cfg(feature = "actor")]
     ActorClosed,
@@ -55,7 +55,7 @@ fn register_cksumvfs() -> rusqlite::Result<()> {
     };
     make_rusqlite_result(
         result_code,
-        "error calling sqlite3_register_cksumvfs"
+        "error calling sqlite3_register_cksumvfs",
     )
 }
 
@@ -125,7 +125,7 @@ fn init_schema(conn: &Connection) -> Result<()> {
 }
 
 struct Metadata {
-    version: i64,
+    version: u32,
     ident: Box<[u8]>,
 }
 
