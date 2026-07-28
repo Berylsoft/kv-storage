@@ -52,8 +52,20 @@ fn set_reserve_bytes(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
-fn run_vaccum(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch("vacuum;")
+fn check_if_updated_rows_zero(result: rusqlite::Result<usize>, msg: &'static str) -> Result<()> {
+    let updated_rows = result?;
+    if updated_rows == 0 {
+        Ok(())
+    } else {
+        Err(Error::Invariant(msg))
+    }
+}
+
+fn run_vacuum(conn: &Connection) -> Result<()> {
+    check_if_updated_rows_zero(
+        conn.execute("vacuum;", []),
+        "run vacuum updated_rows not 0",
+    )
 }
 
 fn ensure_checksum_enabled(conn: &Connection) -> Result<()> {
@@ -67,21 +79,27 @@ fn ensure_checksum_enabled(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn set_synchronous(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "PRAGMA synchronous = EXTRA;
-        PRAGMA fullfsync = true;",
+fn set_synchronous(conn: &Connection) -> Result<()> {
+    check_if_updated_rows_zero(
+        conn.execute("PRAGMA synchronous = EXTRA;", []),
+        "set synchronous updated_rows not 0",
+    )?;
+    check_if_updated_rows_zero(
+        conn.execute("PRAGMA fullfsync = true;", []),
+        "set fullfsync updated_rows not 0",
     )
 }
 
-fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS kv_storage (
-            domain BLOB NOT NULL,
-            key BLOB NOT NULL,
-            value BLOB NOT NULL,
-            PRIMARY KEY (domain, key)
-        ) WITHOUT ROWID;",
+fn init_schema(conn: &Connection) -> Result<()> {
+    let schema = "CREATE TABLE IF NOT EXISTS kv_storage (
+        domain BLOB NOT NULL,
+        key BLOB NOT NULL,
+        value BLOB NOT NULL,
+        PRIMARY KEY (domain, key)
+    ) WITHOUT ROWID;";
+    check_if_updated_rows_zero(
+        conn.execute(schema, []),
+        "init schema updated_rows not 0",
     )
 }
 
@@ -106,7 +124,7 @@ impl WriteContext {
         register_cksumvfs()?;
         let conn = Connection::open(path)?;
         set_reserve_bytes(&conn)?;
-        run_vaccum(&conn)?;
+        run_vacuum(&conn)?;
         set_synchronous(&conn)?;
         ensure_checksum_enabled(&conn)?;
         init_schema(&conn)?;
