@@ -1,7 +1,23 @@
-use rusqlite::{Connection, ffi, params};
 use std::path::Path;
+use rusqlite::{Connection, ffi, params};
+use crc32fast::hash as crc32;
 
 pub const VERSION: i64 = 1;
+
+const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
+    id INTEGER PRIMARY KEY,
+    version INTEGER NOT NULL,
+    ident BLOB NOT NULL,
+    check (id = 1)
+);";
+
+const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
+    domain BLOB NOT NULL,
+    key BLOB NOT NULL,
+    value_crc32 BLOB NOT NULL,
+    value BLOB NOT NULL,
+    PRIMARY KEY (domain, key)
+) WITHOUT ROWID;";
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,8 +31,8 @@ pub enum Error {
 }
 
 impl From<rusqlite::Error> for Error {
-    fn from(value: rusqlite::Error) -> Self {
-        Error::Rusqlite(value)
+    fn from(err: rusqlite::Error) -> Self {
+        Error::Rusqlite(err)
     }
 }
 
@@ -97,25 +113,13 @@ fn set_synchronous(conn: &Connection) -> Result<()> {
 }
 
 fn init_schema(conn: &Connection) -> Result<()> {
-    let metadata_schema = "CREATE TABLE IF NOT EXISTS metadata (
-        id INTEGER PRIMARY KEY,
-        version INTEGER NOT NULL,
-        ident BLOB NOT NULL,
-        check (id = 1)
-    );";
-    let storage_schema = "CREATE TABLE IF NOT EXISTS kv_storage (
-        domain BLOB NOT NULL,
-        key BLOB NOT NULL,
-        value BLOB NOT NULL,
-        PRIMARY KEY (domain, key)
-    ) WITHOUT ROWID;";
     check_if_updated_rows_zero(
-        conn.execute(metadata_schema, []),
+        conn.execute(METADATA_SCHEMA, []),
         "init metadata schema updated_rows not 0",
     )?;
     check_if_updated_rows_zero(
-        conn.execute(storage_schema, []),
-        "init stroage schema updated_rows not 0",
+        conn.execute(STORAGE_SCHEMA, []),
+        "init storage schema updated_rows not 0",
     )
 }
 
@@ -168,7 +172,7 @@ fn filter_error_duplicate_key(err: rusqlite::Error) -> Error {
     if let rusqlite::Error::SqliteFailure(code, _msg) = &err
         && code.extended_code == 1555
         // && let Some(msg) = msg
-        // && msg == "UNIQUE constraint failed: kv_storage.domain, kv_storage.key"
+        // && msg == "UNIQUE constraint failed: storage.domain, storage.key"
     {
         Error::DuplicateKey(err)
     } else {
@@ -194,9 +198,10 @@ impl Writer {
     }
 
     pub fn write_kv(&self, domain: &[u8], key: &[u8], value: &[u8]) -> Result<()> {
+        let value_crc32 = crc32(value).to_be_bytes();
         let result = self.conn.execute(
-            "INSERT INTO kv_storage (domain, key, value) VALUES (?, ?, ?)",
-            params![domain, key, value],
+            "INSERT INTO storage (domain, key, value_crc32, value) VALUES (?, ?, ?, ?)",
+            params![domain, key, value_crc32, value],
         );
         match result {
             Ok(updated_rows) => {
