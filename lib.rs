@@ -9,10 +9,10 @@ pub const VERSION: u32 = 1;
 const SET_VERSION_STMT: &str = "PRAGMA user_version=1;";
 
 const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
-    id INTEGER PRIMARY KEY,
+    id INTEGER NOT NULL PRIMARY KEY,
     ident BLOB NOT NULL,
     check (id = 1)
-);";
+) WITHOUT ROWID;";
 
 const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
     domain BLOB NOT NULL,
