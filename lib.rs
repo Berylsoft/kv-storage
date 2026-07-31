@@ -1,6 +1,6 @@
 use std::path::Path;
 pub use rusqlite;
-use rusqlite::{Connection, ffi, params};
+use rusqlite::{Connection, ffi, params, types::FromSql};
 use crc32fast::hash as crc32;
 
 pub const MAGIC: i32 = 0x42654b56; // BeKV
@@ -78,8 +78,8 @@ fn set_reserve_bytes(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
-fn check_if_updated_rows_zero(result: rusqlite::Result<usize>, msg: &'static str) -> Result<()> {
-    let updated_rows = result?;
+fn run_and_check_update_rows(conn: &Connection, stmt: &str, msg: &'static str) -> Result<()> {
+    let updated_rows = conn.execute(stmt, [])?;
     if updated_rows == 0 {
         Ok(())
     } else {
@@ -87,18 +87,20 @@ fn check_if_updated_rows_zero(result: rusqlite::Result<usize>, msg: &'static str
     }
 }
 
+fn query_one_row<T: FromSql>(conn: &Connection, stmt: &str) -> rusqlite::Result<T> {
+    conn.query_one(stmt, [], |r| r.get::<usize, T>(0))
+}
+
 fn run_vacuum(conn: &Connection) -> Result<()> {
-    check_if_updated_rows_zero(
-        conn.execute("vacuum;", []),
+    run_and_check_update_rows(
+        conn,
+        "vacuum;",
         "run vacuum updated_rows not 0",
     )
 }
 
 fn ensure_checksum_enabled(conn: &Connection) -> Result<()> {
-    let enabled: String = conn.query_row(
-        "PRAGMA checksum_verification;", [],
-        |r| r.get(0),
-    )?;
+    let enabled: String = query_one_row(conn, "PRAGMA checksum_verification;")?;
     if enabled != "1" {
         return Err(Error::Invariant("checksum_verification not enabled"));
     }
@@ -106,42 +108,40 @@ fn ensure_checksum_enabled(conn: &Connection) -> Result<()> {
 }
 
 fn set_synchronous(conn: &Connection) -> Result<()> {
-    check_if_updated_rows_zero(
-        conn.execute("PRAGMA synchronous = EXTRA;", []),
+    run_and_check_update_rows(
+        conn,
+        "PRAGMA synchronous = EXTRA;",
         "set synchronous updated_rows not 0",
     )?;
-    check_if_updated_rows_zero(
-        conn.execute("PRAGMA fullfsync = true;", []),
+    run_and_check_update_rows(
+        conn,
+        "PRAGMA fullfsync = true;",
         "set fullfsync updated_rows not 0",
     )
 }
 
 fn check_if_database_is_new(conn: &Connection) -> Result<bool> {
-    let count: u32 = conn.query_row(
-        "SELECT count(*) FROM sqlite_master WHERE type='table';", [],
-        |r| r.get(0),
+    let count: u32 = query_one_row(
+        conn,
+        "SELECT count(*) FROM sqlite_master WHERE type='table';"
     )?;
     Ok(count == 0)
 }
 
 fn check_or_write_version(conn: &Connection) -> Result<()> {
-    let magic: i32 = conn.query_row(
-        "PRAGMA application_id;", [],
-        |r| r.get(0),
-    )?;
-    let version: u32 = conn.query_row(
-        "PRAGMA user_version;", [],
-        |r| r.get(0),
-    )?;
+    let magic: i32 = query_one_row(conn, "PRAGMA application_id;")?;
+    let version: u32 = query_one_row(conn, "PRAGMA user_version;")?;
     let database_is_new = check_if_database_is_new(conn)?;
     match (magic, version, database_is_new) {
         (0, 0, true) => {
-            check_if_updated_rows_zero(
-                conn.execute(SET_MAGIC_STMT, []),
+            run_and_check_update_rows(
+                conn,
+                SET_MAGIC_STMT,
                 "set magic updated_rows not 0",
             )?;
-            check_if_updated_rows_zero(
-                conn.execute(SET_VERSION_STMT, []),
+            run_and_check_update_rows(
+                conn,
+                SET_VERSION_STMT,
                 "set version updated_rows not 0",
             )
         }
@@ -158,12 +158,14 @@ fn check_or_write_version(conn: &Connection) -> Result<()> {
 }
 
 fn init_schema(conn: &Connection) -> Result<()> {
-    check_if_updated_rows_zero(
-        conn.execute(METADATA_SCHEMA, []),
+    run_and_check_update_rows(
+        conn,
+        METADATA_SCHEMA,
         "init metadata schema updated_rows not 0",
     )?;
-    check_if_updated_rows_zero(
-        conn.execute(STORAGE_SCHEMA, []),
+    run_and_check_update_rows(
+        conn,
+        STORAGE_SCHEMA,
         "init storage schema updated_rows not 0",
     )
 }
