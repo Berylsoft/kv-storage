@@ -11,15 +11,23 @@ const SET_VERSION_STMT: &str = "PRAGMA user_version=1;";
 const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
     id INTEGER NOT NULL PRIMARY KEY,
     ident BLOB NOT NULL,
-    check (id = 1)
+    check (id = 0)
+) WITHOUT ROWID;";
+
+const DOMAINS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS domains (
+    domain_id INTEGER NOT NULL PRIMARY KEY,
+    domain BLOB NOT NULL
 ) WITHOUT ROWID;";
 
 const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
-    domain BLOB NOT NULL,
+    domain_id INTEGER NOT NULL,
     key BLOB NOT NULL,
     value_crc32 INTEGER NOT NULL,
     value BLOB NOT NULL,
-    PRIMARY KEY (domain, key)
+    PRIMARY KEY (domain_id, key)
+    FOREIGN KEY (domain_id) REFERENCES domains(domain_id)
+        ON DELETE RESTRICT
+        ON UPDATE RESTRICT
 ) WITHOUT ROWID;";
 
 #[derive(Debug)]
@@ -27,6 +35,8 @@ pub enum Error {
     Rusqlite(rusqlite::Error),
     Invariant(&'static str),
     DuplicateKey(rusqlite::Error),
+    DuplicateDomainId(rusqlite::Error),
+    UnknownDomainId(rusqlite::Error),
     NotABeKVDatabase,
     Version { exp: u32, cur: u32 },
     Ident { exp: Box<[u8]>, cur: Box<[u8]> },
@@ -120,6 +130,14 @@ fn set_synchronous(conn: &Connection) -> Result<()> {
     )
 }
 
+fn enable_foreign_keys(conn: &Connection) -> Result<()> {
+    run_and_check_update_rows(
+        conn,
+        "PRAGMA foreign_keys = ON;",
+        "enable foreign_keys updated_rows not 0"
+    )
+}
+
 fn check_if_database_is_new(conn: &Connection) -> Result<bool> {
     let count: u32 = query_one_row(
         conn,
@@ -165,6 +183,11 @@ fn init_schema(conn: &Connection) -> Result<()> {
     )?;
     run_and_check_update_rows(
         conn,
+        DOMAINS_SCHEMA,
+        "init domains schema updated_rows not 0",
+    )?;
+    run_and_check_update_rows(
+        conn,
         STORAGE_SCHEMA,
         "init storage schema updated_rows not 0",
     )
@@ -175,7 +198,7 @@ struct Metadata {
 }
 
 fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
-    let mut stmt = conn.prepare("SELECT * FROM metadata WHERE id = 1")?;
+    let mut stmt = conn.prepare("SELECT * FROM metadata")?;
     let mut metadata_iter = stmt.query_map([], |row| {
         Ok(Metadata {
             ident: row.get(1)?,
@@ -184,8 +207,8 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
     match metadata_iter.next() {
         None => {
             let updated_rows = conn.execute(
-                "INSERT INTO metadata (ident) VALUES (?)",
-                params![ident],
+                "INSERT INTO metadata (id, ident) VALUES (?, ?)",
+                params![0, ident],
             )?;
             if updated_rows != 1 {
                 return Err(Error::Invariant("write_metadata updated_rows not 1"));
@@ -207,15 +230,10 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn filter_error_duplicate_key(err: rusqlite::Error) -> Error {
-    if let rusqlite::Error::SqliteFailure(code, _msg) = &err
-        && code.extended_code == 1555
-        // && let Some(msg) = msg
-        // && msg == "UNIQUE constraint failed: storage.domain, storage.key"
-    {
-        Error::DuplicateKey(err)
-    } else {
-        Error::Rusqlite(err)
+fn take_error_code(err: &rusqlite::Error) -> Option<i32> {
+    match err {
+        rusqlite::Error::SqliteFailure(code, _) => Some(code.extended_code),
+        _ => None,
     }
 }
 
@@ -230,6 +248,7 @@ impl Writer {
         set_reserve_bytes(&conn)?;
         run_vacuum(&conn)?;
         set_synchronous(&conn)?;
+        enable_foreign_keys(&conn)?;
         ensure_checksum_enabled(&conn)?;
         check_or_write_version(&conn)?;
         init_schema(&conn)?;
@@ -237,20 +256,49 @@ impl Writer {
         Ok(Self { conn })
     }
 
-    pub fn write_kv(&self, domain: &[u8], key: &[u8], value: &[u8]) -> Result<()> {
-        let value_crc32 = crc32(value);
+    pub fn write_domain(&self, domain_id: i64, domain: &[u8]) -> Result<()> {
         let result = self.conn.execute(
-            "INSERT INTO storage (domain, key, value_crc32, value) VALUES (?, ?, ?, ?)",
-            params![domain, key, value_crc32, value],
+            "INSERT INTO domains (domain_id, domain) VALUES (?, ?)",
+            params![domain_id, domain],
         );
         match result {
             Ok(updated_rows) => {
-                if updated_rows != 1 {
-                    return Err(Error::Invariant("write_kv updated_rows not 1"));
+                if updated_rows == 1 {
+                    Ok(())
+                } else {
+                    Err(Error::Invariant("write_domain updated_rows not 1"))
                 }
-                Ok(())
             }
-            Err(err) => Err(filter_error_duplicate_key(err)),
+            Err(err) => {
+                match take_error_code(&err) {
+                    Some(1555) => Err(Error::DuplicateDomainId(err)),
+                    _ => Err(err.into()),
+                }
+            }
+        }
+    }
+
+    pub fn write_kv(&self, domain_id: i64, key: &[u8], value: &[u8]) -> Result<()> {
+        let value_crc32 = crc32(value);
+        let result = self.conn.execute(
+            "INSERT INTO storage (domain_id, key, value_crc32, value) VALUES (?, ?, ?, ?)",
+            params![domain_id, key, value_crc32, value],
+        );
+        match result {
+            Ok(updated_rows) => {
+                if updated_rows == 1 {
+                    Ok(())
+                } else {
+                    Err(Error::Invariant("write_kv updated_rows not 1"))
+                }
+            }
+            Err(err) => {
+                match take_error_code(&err) {
+                    Some(1555) => Err(Error::DuplicateKey(err)),
+                    Some(787) => Err(Error::UnknownDomainId(err)),
+                    _ => Err(err.into()),
+                }
+            }
         }
     }
 

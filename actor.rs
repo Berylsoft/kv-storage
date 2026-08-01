@@ -4,10 +4,20 @@ use bytes::Bytes;
 use actor_core::*;
 use super::*;
 
-pub struct KV {
+pub struct Domain {
+    pub domain_id: i64,
     pub domain: Bytes,
+}
+
+pub struct KV {
+    pub domain_id: i64,
     pub key: Bytes,
     pub value: Bytes,
+}
+
+pub enum Request {
+    Domain(Domain),
+    KV(KV),
 }
 
 impl From<ClosedError> for Error {
@@ -26,14 +36,21 @@ pub struct WriterContext {
 }
 
 impl Context for WriterContext {
-    type Req = KV;
+    type Req = Request;
     type Res = ();
     type Err = Error;
 }
 
 impl SyncContext for WriterContext {
-    fn exec(&mut self, req: KV) -> Result<()> {
-        self.writer.write_kv(&req.domain, &req.key, &req.value)
+    fn exec(&mut self, req: Request) -> Result<()> {
+        match req {
+            Request::Domain(Domain { domain_id, domain }) => {
+                self.writer.write_domain(domain_id, &domain)
+            }
+            Request::KV(KV { domain_id, key, value }) => {
+                self.writer.write_kv(domain_id, &key, &value)
+            }
+        }
     }
 
     fn close(self) -> Result<()> {
