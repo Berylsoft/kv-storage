@@ -256,7 +256,7 @@ impl Writer {
         Ok(Self { conn })
     }
 
-    pub fn write_domain(&self, domain_id: i64, domain: &[u8]) -> Result<()> {
+    pub fn write_domain(&self, domain_id: u32, domain: &[u8]) -> Result<()> {
         let result = self.conn.execute(
             "INSERT INTO domains (domain_id, domain) VALUES (?, ?)",
             params![domain_id, domain],
@@ -278,7 +278,7 @@ impl Writer {
         }
     }
 
-    pub fn write_kv(&self, domain_id: i64, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn write_kv(&self, domain_id: u32, key: &[u8], value: &[u8]) -> Result<()> {
         let value_crc32 = crc32(value);
         let result = self.conn.execute(
             "INSERT INTO storage (domain_id, key, value_crc32, value) VALUES (?, ?, ?, ?)",

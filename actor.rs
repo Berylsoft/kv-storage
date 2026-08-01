@@ -5,12 +5,12 @@ use actor_core::*;
 use super::*;
 
 pub struct Domain {
-    pub domain_id: i64,
+    pub domain_id: u32,
     pub domain: Bytes,
 }
 
 pub struct KV {
-    pub domain_id: i64,
+    pub domain_id: u32,
     pub key: Bytes,
     pub value: Bytes,
 }
