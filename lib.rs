@@ -34,9 +34,9 @@ const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
 pub enum Error {
     Rusqlite(rusqlite::Error),
     Invariant(&'static str),
-    DuplicateKey(rusqlite::Error),
-    DuplicateDomainId(rusqlite::Error),
-    UnknownDomainId(rusqlite::Error),
+    DuplicateKey,
+    DuplicateDomain,
+    UnknownDomain,
     NotABeKVDatabase,
     Version { exp: u32, cur: u32 },
     Ident { exp: Box<[u8]>, cur: Box<[u8]> },
@@ -98,7 +98,7 @@ fn run_and_check_update_rows(conn: &Connection, stmt: &str, msg: &'static str) -
 }
 
 fn query_one_row<T: FromSql>(conn: &Connection, stmt: &str) -> rusqlite::Result<T> {
-    conn.query_one(stmt, [], |r| r.get::<usize, T>(0))
+    conn.query_one(stmt, [], |r| r.get::<_, T>(0))
 }
 
 fn run_vacuum(conn: &Connection) -> Result<()> {
@@ -230,13 +230,6 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn take_error_code(err: &rusqlite::Error) -> Option<i32> {
-    match err {
-        rusqlite::Error::SqliteFailure(code, _) => Some(code.extended_code),
-        _ => None,
-    }
-}
-
 pub struct Writer {
     conn: Connection,
 }
@@ -256,50 +249,59 @@ impl Writer {
         Ok(Self { conn })
     }
 
-    pub fn write_domain(&self, domain_id: u32, domain: &[u8]) -> Result<()> {
-        let result = self.conn.execute(
+    pub fn write_domain(&mut self, domain_id: u32, domain: &[u8]) -> Result<()> {
+        let tr = self.conn.transaction()?;
+
+        let domain_exists: bool = tr.query_one(
+            "SELECT EXISTS (SELECT 1 FROM domains WHERE domain_id = ?)",
+            params![domain_id], |r| r.get(0),
+        )?;
+        if domain_exists {
+            return Err(Error::DuplicateDomain);
+        }
+
+        let updated_rows = tr.execute(
             "INSERT INTO domains (domain_id, domain) VALUES (?, ?)",
             params![domain_id, domain],
-        );
-        match result {
-            Ok(updated_rows) => {
-                if updated_rows == 1 {
-                    Ok(())
-                } else {
-                    Err(Error::Invariant("write_domain updated_rows not 1"))
-                }
-            }
-            Err(err) => {
-                match take_error_code(&err) {
-                    Some(1555) => Err(Error::DuplicateDomainId(err)),
-                    _ => Err(err.into()),
-                }
-            }
+        )?;
+        if updated_rows != 1 {
+            return Err(Error::Invariant("write_domain updated_rows not 1"));
         }
+        
+        tr.commit()?;
+        Ok(())
     }
 
-    pub fn write_kv(&self, domain_id: u32, key: &[u8], value: &[u8]) -> Result<()> {
+    pub fn write_kv(&mut self, domain_id: u32, key: &[u8], value: &[u8]) -> Result<()> {
         let value_crc32 = crc32(value);
-        let result = self.conn.execute(
+        let tr = self.conn.transaction()?;
+
+        let domain_exists: bool = tr.query_one(
+            "SELECT EXISTS (SELECT 1 FROM domains WHERE domain_id = ?)",
+            params![domain_id], |r| r.get(0),
+        )?;
+        if !domain_exists {
+            return Err(Error::UnknownDomain);
+        }
+
+        let key_exists: bool = tr.query_one(
+            "SELECT EXISTS (SELECT 1 FROM storage WHERE (domain_id, key) = (?, ?))",
+            params![domain_id, key], |r| r.get(0),
+        )?;
+        if key_exists {
+            return Err(Error::DuplicateKey);
+        }
+
+        let updated_rows = tr.execute(
             "INSERT INTO storage (domain_id, key, value_crc32, value) VALUES (?, ?, ?, ?)",
             params![domain_id, key, value_crc32, value],
-        );
-        match result {
-            Ok(updated_rows) => {
-                if updated_rows == 1 {
-                    Ok(())
-                } else {
-                    Err(Error::Invariant("write_kv updated_rows not 1"))
-                }
-            }
-            Err(err) => {
-                match take_error_code(&err) {
-                    Some(1555) => Err(Error::DuplicateKey(err)),
-                    Some(787) => Err(Error::UnknownDomainId(err)),
-                    _ => Err(err.into()),
-                }
-            }
+        )?;
+        if updated_rows != 1 {
+            return Err(Error::Invariant("write_kv updated_rows not 1"));
         }
+        
+        tr.commit()?;
+        Ok(())
     }
 
     pub fn close(self) -> Result<()> {
