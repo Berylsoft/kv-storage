@@ -1,7 +1,6 @@
 use std::path::Path;
 pub use rusqlite;
 use rusqlite::{Connection, ffi, params, types::FromSql};
-use crc32fast::hash as crc32;
 
 pub const MAGIC: i32 = 0x42654b56; // BeKV
 const SET_MAGIC_STMT: &str = "PRAGMA application_id=0x42654b56;";
@@ -22,7 +21,6 @@ const DOMAINS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS domains (
 const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
     domain_id INTEGER NOT NULL,
     key BLOB NOT NULL,
-    value_crc32 INTEGER NOT NULL,
     value BLOB NOT NULL,
     PRIMARY KEY (domain_id, key)
     FOREIGN KEY (domain_id) REFERENCES domains(domain_id)
@@ -276,7 +274,6 @@ impl Writer {
     }
 
     pub fn write_kv(&mut self, domain_id: u32, key: &[u8], value: &[u8]) -> Result<()> {
-        let value_crc32 = crc32(value);
         let tr = self.conn.transaction().context("write kv: begin transaction")?;
 
         let domain_exists: bool = tr.query_one(
@@ -296,8 +293,8 @@ impl Writer {
         }
 
         let updated_rows = tr.execute(
-            "INSERT INTO storage (domain_id, key, value_crc32, value) VALUES (?, ?, ?, ?)",
-            params![domain_id, key, value_crc32, value],
+            "INSERT INTO storage (domain_id, key, value) VALUES (?, ?, ?)",
+            params![domain_id, key, value],
         ).context("write kv: write")?;
         if updated_rows != 1 {
             return Err(Error::Invariant("write kv updated_rows not 1"));
