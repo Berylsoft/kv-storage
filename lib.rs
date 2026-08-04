@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::atomic::{self, AtomicBool}};
 pub use rusqlite;
 use rusqlite::{Connection, ffi, params, types::FromSql};
 
@@ -73,6 +73,43 @@ fn register_cksumvfs() -> rusqlite::Result<()> {
         result_code,
         "error calling sqlite3_register_cksumvfs",
     )
+}
+
+fn register_cksumvfs_once() -> rusqlite::Result<()> {
+    static REGISTER_RUNNING: AtomicBool = AtomicBool::new(false);
+    static REGISTER_DONE: AtomicBool = AtomicBool::new(false);
+
+    while !REGISTER_DONE.load(atomic::Ordering::Acquire) {
+        struct Guard;
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                REGISTER_RUNNING.store(false, atomic::Ordering::Release);
+            }
+        }
+
+        let running = REGISTER_RUNNING.compare_exchange(
+            false,
+            true,
+            atomic::Ordering::AcqRel,
+            atomic::Ordering::Relaxed,
+        );
+        if running.is_err() {
+            std::hint::spin_loop();
+            continue;
+        }
+        let guard = Guard;
+
+        if REGISTER_DONE.load(atomic::Ordering::Acquire) {
+            break;
+        }
+
+        register_cksumvfs()?;
+
+        REGISTER_DONE.store(true, atomic::Ordering::Release);
+        drop(guard);
+    }
+
+    Ok(())
 }
 
 fn set_reserve_bytes(conn: &Connection) -> rusqlite::Result<()> {
@@ -237,7 +274,7 @@ pub struct Writer {
 
 impl Writer {
     pub fn open(path: impl AsRef<Path>, ident: &[u8]) -> Result<Self> {
-        register_cksumvfs().context("register cksumvfs")?;
+        register_cksumvfs_once().context("register cksumvfs")?;
         let conn = Connection::open(path).context("open file")?;
         set_reserve_bytes(&conn).context("set reserve bytes")?;
         run_vacuum(&conn)?;
