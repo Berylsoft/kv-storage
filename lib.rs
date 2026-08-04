@@ -39,8 +39,8 @@ pub enum Error {
     DuplicateDomain,
     UnknownDomain,
     NotABeKVDatabase,
-    Version { exp: u32, cur: u32 },
-    Ident { exp: Box<[u8]>, cur: Box<[u8]> },
+    VersionNotMatch { exp: u32, cur: u32 },
+    IdentNotMatch { exp: Box<[u8]>, cur: Box<[u8]> },
     #[cfg(feature = "actor")]
     ActorClosed,
 }
@@ -152,8 +152,8 @@ fn check_or_write_version(conn: &Connection) -> Result<()> {
     let magic: i32 = query_one_row(conn, "PRAGMA application_id;").context("get magic")?;
     let version: u32 = query_one_row(conn, "PRAGMA user_version;").context("get version")?;
     let database_is_new = check_if_database_is_new(conn)?;
-    match (magic, version, database_is_new) {
-        (0, 0, true) => {
+    match (database_is_new, magic, version) {
+        (true, 0, 0) => {
             run_and_check_update_rows(
                 conn,
                 SET_MAGIC_STMT,
@@ -165,11 +165,11 @@ fn check_or_write_version(conn: &Connection) -> Result<()> {
                 "set version",
             )
         }
-        (MAGIC, VERSION, false) => {
+        (false, MAGIC, VERSION) => {
             Ok(())
         }
-        (MAGIC, cur_version, false) => {
-            Err(Error::Version { exp: VERSION, cur: cur_version })
+        (false, MAGIC, cur_version) => {
+            Err(Error::VersionNotMatch { exp: VERSION, cur: cur_version })
         }
         _ => {
             Err(Error::NotABeKVDatabase)
@@ -220,7 +220,7 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
         Some(cur) => {
             let cur = cur.context("check metadata: get")?;
             if ident != cur.ident.as_ref() {
-                return Err(Error::Ident {
+                return Err(Error::IdentNotMatch {
                     exp: ident.into(),
                     cur: cur.ident,
                 });
