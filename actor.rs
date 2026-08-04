@@ -29,7 +29,6 @@ impl From<ClosedError> for Error {
 pub struct WriterContextConfig {
     path: PathBuf,
     ident: Bytes,
-    deny_dup_key: bool,
 }
 
 pub struct WriterContext {
@@ -63,7 +62,7 @@ impl SyncInitContext for WriterContext {
     type Init = WriterContextConfig;
 
     fn init(init: WriterContextConfig) -> Result<Self> {
-        let writer = Writer::open(init.path, init.deny_dup_key, &init.ident)?;
+        let writer = Writer::open(init.path, &init.ident)?;
         Ok(WriterContext { writer })
     }
 }

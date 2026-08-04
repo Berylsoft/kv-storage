@@ -2,12 +2,9 @@ use std::path::Path;
 pub use rusqlite;
 use rusqlite::{Connection, ffi, params, types::FromSql};
 use crc32fast::hash as crc32;
-use foundations::const_concat;
 
-pub const MAGIC_A: i32 = 0x42654b56; // BeKV
-const SET_MAGIC_A_STMT: &str = "PRAGMA application_id=0x42654b56;";
-pub const MAGIC_B: i32 = 0x42654b76; // BeKv
-const SET_MAGIC_B_STMT: &str = "PRAGMA application_id=0x42654b76;";
+pub const MAGIC: i32 = 0x42654b56; // BeKV
+const SET_MAGIC_STMT: &str = "PRAGMA application_id=0x42654b56;";
 pub const VERSION: u32 = 1;
 const SET_VERSION_STMT: &str = "PRAGMA user_version=1;";
 
@@ -22,21 +19,16 @@ const DOMAINS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS domains (
     domain BLOB NOT NULL
 ) WITHOUT ROWID;";
 
-const STORAGE_SCHEMA_1: &str = "CREATE TABLE IF NOT EXISTS storage (
+const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (
     domain_id INTEGER NOT NULL,
     key BLOB NOT NULL,
     value_crc32 INTEGER NOT NULL,
     value BLOB NOT NULL,
-    PRIMARY KEY ";
-const STORAGE_SCHEMA_2_A: &str = "(domain_id, key)";
-const STORAGE_SCHEMA_2_B: &str = "(domain_id, key, value_crc32)";
-const STORAGE_SCHEMA_3: &str = ",
+    PRIMARY KEY (domain_id, key)
     FOREIGN KEY (domain_id) REFERENCES domains(domain_id)
         ON DELETE RESTRICT
         ON UPDATE RESTRICT
 ) WITHOUT ROWID;";
-const STORAGE_SCHEMA_A: &str = const_concat!(STORAGE_SCHEMA_1, STORAGE_SCHEMA_2_A, STORAGE_SCHEMA_3);
-const STORAGE_SCHEMA_B: &str = const_concat!(STORAGE_SCHEMA_1, STORAGE_SCHEMA_2_B, STORAGE_SCHEMA_3);
 
 #[derive(Debug)]
 pub enum Error {
@@ -44,13 +36,11 @@ pub enum Error {
     Invariant(&'static str),
     InvariantUpdatedRowNot0(&'static str),
     DuplicateKey,
-    DuplicateValueCrc,
     DuplicateDomain,
     UnknownDomain,
     NotABeKVDatabase,
-    VariantNotMatch { exp: bool, cur: bool },
-    VersionNotMatch { exp: u32, cur: u32 },
-    IdentNotMatch { exp: Box<[u8]>, cur: Box<[u8]> },
+    Version { exp: u32, cur: u32 },
+    Ident { exp: Box<[u8]>, cur: Box<[u8]> },
     #[cfg(feature = "actor")]
     ActorClosed,
 }
@@ -158,15 +148,15 @@ fn check_if_database_is_new(conn: &Connection) -> Result<bool> {
     Ok(count == 0)
 }
 
-fn check_or_write_version(conn: &Connection, deny_dup_key: bool) -> Result<()> {
+fn check_or_write_version(conn: &Connection) -> Result<()> {
     let magic: i32 = query_one_row(conn, "PRAGMA application_id;").context("get magic")?;
     let version: u32 = query_one_row(conn, "PRAGMA user_version;").context("get version")?;
     let database_is_new = check_if_database_is_new(conn)?;
-    match (database_is_new, magic, version, deny_dup_key) {
-        (true, 0, 0, _) => {
+    match (magic, version, database_is_new) {
+        (0, 0, true) => {
             run_and_check_update_rows(
                 conn,
-                if deny_dup_key { SET_MAGIC_A_STMT } else { SET_MAGIC_B_STMT },
+                SET_MAGIC_STMT,
                 "set magic",
             )?;
             run_and_check_update_rows(
@@ -175,18 +165,11 @@ fn check_or_write_version(conn: &Connection, deny_dup_key: bool) -> Result<()> {
                 "set version",
             )
         }
-        (false, MAGIC_A, VERSION, true) |
-        (false, MAGIC_B, VERSION, false) => {
+        (MAGIC, VERSION, false) => {
             Ok(())
         }
-        (false, MAGIC_A, _, cur @ false) => {
-            Err(Error::VariantNotMatch { exp: deny_dup_key, cur })
-        }
-        (false, MAGIC_B, _, cur @ true) => {
-            Err(Error::VariantNotMatch { exp: deny_dup_key, cur })
-        }
-        (false, MAGIC_A | MAGIC_B, cur, _) => {
-            Err(Error::VersionNotMatch { exp: VERSION, cur })
+        (MAGIC, cur_version, false) => {
+            Err(Error::Version { exp: VERSION, cur: cur_version })
         }
         _ => {
             Err(Error::NotABeKVDatabase)
@@ -194,7 +177,7 @@ fn check_or_write_version(conn: &Connection, deny_dup_key: bool) -> Result<()> {
     }
 }
 
-fn init_schema(conn: &Connection, deny_dup_key: bool) -> Result<()> {
+fn init_schema(conn: &Connection) -> Result<()> {
     run_and_check_update_rows(
         conn,
         METADATA_SCHEMA,
@@ -207,7 +190,7 @@ fn init_schema(conn: &Connection, deny_dup_key: bool) -> Result<()> {
     )?;
     run_and_check_update_rows(
         conn,
-        if deny_dup_key { STORAGE_SCHEMA_A } else { STORAGE_SCHEMA_B },
+        STORAGE_SCHEMA,
         "init storage schema",
     )
 }
@@ -237,7 +220,7 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
         Some(cur) => {
             let cur = cur.context("check metadata: get")?;
             if ident != cur.ident.as_ref() {
-                return Err(Error::IdentNotMatch {
+                return Err(Error::Ident {
                     exp: ident.into(),
                     cur: cur.ident,
                 });
@@ -252,11 +235,10 @@ fn check_or_write_metadata(conn: &Connection, ident: &[u8]) -> Result<()> {
 
 pub struct Writer {
     conn: Connection,
-    deny_dup_key: bool,
 }
 
 impl Writer {
-    pub fn open(path: impl AsRef<Path>, deny_dup_key: bool, ident: &[u8]) -> Result<Self> {
+    pub fn open(path: impl AsRef<Path>, ident: &[u8]) -> Result<Self> {
         register_cksumvfs().context("register cksumvfs")?;
         let conn = Connection::open(path).context("open file")?;
         set_reserve_bytes(&conn).context("set reserve bytes")?;
@@ -264,10 +246,10 @@ impl Writer {
         set_synchronous(&conn)?;
         enable_foreign_keys(&conn)?;
         ensure_checksum_enabled(&conn)?;
-        check_or_write_version(&conn, deny_dup_key)?;
-        init_schema(&conn, deny_dup_key)?;
+        check_or_write_version(&conn)?;
+        init_schema(&conn)?;
         check_or_write_metadata(&conn, ident)?;
-        Ok(Self { conn, deny_dup_key })
+        Ok(Self { conn })
     }
 
     pub fn write_domain(&mut self, domain_id: u32, domain: &[u8]) -> Result<()> {
@@ -305,22 +287,12 @@ impl Writer {
             return Err(Error::UnknownDomain);
         }
 
-        if self.deny_dup_key {
-            let key_exists: bool = tr.query_one(
-                "SELECT EXISTS (SELECT 1 FROM storage WHERE (domain_id, key) = (?, ?))",
-                params![domain_id, key], |r| r.get(0),
-            ).context("write kv: check if key exists")?;
-            if key_exists {
-                return Err(Error::DuplicateKey);
-            }
-        } else {
-            let key_value_exists: bool = tr.query_one(
-                "SELECT EXISTS (SELECT 1 FROM storage WHERE (domain_id, key, value_crc32) = (?, ?, ?))",
-                params![domain_id, key, value_crc32], |r| r.get(0),
-            ).context("write kv: check if key-value exists")?;
-            if key_value_exists {
-                return Err(Error::DuplicateValueCrc);
-            }
+        let key_exists: bool = tr.query_one(
+            "SELECT EXISTS (SELECT 1 FROM storage WHERE (domain_id, key) = (?, ?))",
+            params![domain_id, key], |r| r.get(0),
+        ).context("write kv: check if key exists")?;
+        if key_exists {
+            return Err(Error::DuplicateKey);
         }
 
         let updated_rows = tr.execute(
