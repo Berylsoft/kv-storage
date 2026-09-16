@@ -4,11 +4,13 @@ use bytes::Bytes;
 use actor_core::*;
 use super::*;
 
+#[derive(Clone)]
 pub struct Domain {
     pub domain_id: u32,
     pub domain: Bytes,
 }
 
+#[derive(Clone)]
 pub struct KV {
     pub domain_id: u32,
     pub key: Bytes,
