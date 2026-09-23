@@ -187,7 +187,7 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata) -> Result<
                 params![0, metadata.ident],
             ).context("write metadata")?;
             if updated_rows != 1 {
-                return Err(Error::Invariant("write_metadata updated_rows not 1"));
+                return Err(Error::Invariant("write metadata updated_rows not 1"));
             }
         }
         Some(cur) => {
