@@ -1,5 +1,16 @@
+pub mod deps {
+    pub use rusqlite;
+
+    #[cfg(feature = "actor")]
+    pub use bytes;
+    #[cfg(feature = "actor")]
+    pub use actor_core;
+
+    #[cfg(feature = "actor-domain-handle")]
+    pub use actor;
+}
+
 use std::{path::Path, sync::atomic::{self, AtomicBool}};
-pub use rusqlite;
 use rusqlite::{Connection, ffi, params, types::FromSql};
 
 pub const MAGIC: i32 = 0x42654b56; // BeKV

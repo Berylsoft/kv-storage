@@ -14,8 +14,18 @@ path = "lib.rs"
 rusqlite = { git = "https://github.com/Berylsoft/rusqlite-cksumvfs", version = "0.40.1-cksumvfs", features = ["bundled", "blob", "cksumvfs"] }
 bytes = { version = "1", optional = true }
 actor-core = { git = "https://github.com/Berylsoft/actor", optional = true }
-actor = { git = "https://github.com/Berylsoft/actor", optional = true, features = ["async"] }
+actor = { git = "https://github.com/Berylsoft/actor", optional = true, features = ["sync"] }
 
 [features]
 actor = ["bytes", "actor-core"]
 actor-domain-handle = ["actor", "dep:actor"]
+
+[dev-dependencies]
+async-global-executor = "3"
+
+[[example]]
+name = "simple"
+
+[[example]]
+name = "actor"
+required-features = ["actor-domain-handle"]

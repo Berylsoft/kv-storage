@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-pub use bytes;
 use bytes::Bytes;
 use actor_core::*;
 use super::*;
@@ -29,8 +28,8 @@ impl From<ClosedError> for Error {
 }
 
 pub struct WriterContextConfig {
-    path: PathBuf,
-    ident: Bytes,
+    pub path: PathBuf,
+    pub ident: Bytes,
 }
 
 pub struct WriterContext {
