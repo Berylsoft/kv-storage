@@ -1,8 +1,9 @@
 use std::assert_matches;
 use kv_storage::{
-    Result, Error,
-    actor::{WriterContextConfig},
-    actor_domain_handle::{create, DomainWriteHandle},
+    Metadata,
+    error::{Error, Result},
+    writer::actor::{WriterContextConfig},
+    writer::actor_domain_handle::{create, DomainWriteHandle},
 };
 
 fn b(bytes: &'static [u8]) -> bytes::Bytes {
@@ -20,7 +21,9 @@ fn main() {
     async_global_executor::block_on(async {
         let config = WriterContextConfig {
             path: "temp.db".into(),
-            ident: "test".into(),
+            metadata: Metadata {
+                ident: b"test".as_ref().into(),
+            },
         };
         let handle = create(config).await.unwrap();
         let domain_1 = handle.spawn_domain(1, b(b"domain")).await.unwrap();

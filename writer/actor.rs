@@ -29,7 +29,7 @@ impl From<ClosedError> for Error {
 
 pub struct WriterContextConfig {
     pub path: PathBuf,
-    pub ident: Bytes,
+    pub metadata: Metadata,
 }
 
 pub struct WriterContext {
@@ -62,8 +62,8 @@ impl SyncContext for WriterContext {
 impl SyncInitContext for WriterContext {
     type Init = WriterContextConfig;
 
-    fn init(init: WriterContextConfig) -> Result<Self> {
-        let writer = Writer::open(init.path, &init.ident)?;
+    fn init(WriterContextConfig { path, metadata }: WriterContextConfig) -> Result<Self> {
+        let writer = Writer::open(path, metadata)?;
         Ok(WriterContext { writer })
     }
 }

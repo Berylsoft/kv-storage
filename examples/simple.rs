@@ -1,8 +1,11 @@
 use std::assert_matches;
-use kv_storage::{Error, Writer};
+use kv_storage::{Metadata, error::Error, writer::Writer};
 
 fn main() {
-    let mut ctx = Writer::open("temp.db", b"test").unwrap();
+    let metadata = Metadata {
+        ident: b"test".as_ref().into()
+    };
+    let mut ctx = Writer::open("temp.db", metadata).unwrap();
     ctx.write_domain(1, b"domain").unwrap();
     ctx.write_kv(1, b"1", b"value1").unwrap();
     ctx.write_kv(1, b"2", b"value2").unwrap();
