@@ -55,4 +55,30 @@ impl Reader {
     
         Ok(domain_id)
     }
+
+    pub fn get_value_by_key(&mut self, domain_id: u32, key: &[u8]) -> Result<Box<[u8]>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT value FROM storage WHERE domain_id = ? AND key = ?",
+        ).context("get_value_by_key: prepare")?;
+
+        let value = stmt.query_one(
+            params![domain_id, key],
+            |r| r.get(0),
+        ).context("get_value_by_key: get")?;
+    
+        Ok(value)
+    }
+
+    pub fn get_key_by_value(&mut self, domain_id: u32, value: &[u8]) -> Result<Box<[u8]>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT key FROM storage WHERE domain_id = ? AND value = ?",
+        ).context("get_key_by_value: prepare")?;
+
+        let key = stmt.query_one(
+            params![domain_id, value],
+            |r| r.get(0),
+        ).context("get_key_by_value: get")?;
+    
+        Ok(key)
+    }
 }

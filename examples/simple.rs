@@ -24,5 +24,7 @@ fn main() {
     assert_matches!(
         ctx.write_domain(2, b"domain").unwrap_err(),
         Error::DuplicateDomainName,
-    )
+    );
+    ctx.write_domain(2, b"domain2").unwrap();
+    ctx.write_kv(2, b"1", b"value1").unwrap();
 }
