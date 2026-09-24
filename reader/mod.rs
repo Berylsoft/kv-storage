@@ -1,10 +1,6 @@
 use std::path::Path;
 use rusqlite::{Connection, params};
-use crate::{
-    Metadata,
-    error::{Result, ErrorContext},
-    init::*,
-};
+use crate::{Metadata, error::{Result, ErrorContext}, init};
 
 pub struct Reader {
     conn: Connection,
@@ -12,21 +8,21 @@ pub struct Reader {
 
 impl Reader {
     pub fn open(path: impl AsRef<Path>) -> Result<(Self, Metadata)> {
-        register_cksumvfs_once().context("register cksumvfs")?;
+        init::register_cksumvfs_once().context("register cksumvfs")?;
         let conn = Connection::open_with_flags(
             path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
         ).context("open file")?;
-        set_reserve_bytes(&conn).context("set reserve bytes")?;
+        init::set_reserve_bytes(&conn).context("set reserve bytes")?;
 
         // generally(TM) not necessary
-        set_synchronous(&conn)?;
-        enable_foreign_keys(&conn)?;
+        init::set_synchronous(&conn)?;
+        init::enable_foreign_keys(&conn)?;
 
-        ensure_checksum_enabled(&conn)?;
-        check_version(&conn)?;
-        init_schema(&conn)?;
-        let metadata = read_metadata(&conn)?;
+        init::ensure_checksum_enabled(&conn)?;
+        init::check_version(&conn)?;
+        init::init_schema(&conn)?;
+        let metadata = init::read_metadata(&conn)?;
         Ok((Reader { conn }, metadata))
     }
 

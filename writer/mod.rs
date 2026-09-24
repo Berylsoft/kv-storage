@@ -1,10 +1,6 @@
 use std::path::Path;
 use rusqlite::{Connection, params};
-use crate::{
-    Metadata,
-    error::{Error, Result, ErrorContext},
-    init::*,
-};
+use crate::{Metadata, error::{Error, Result, ErrorContext}, init};
 
 pub struct Writer {
     conn: Connection,
@@ -12,16 +8,16 @@ pub struct Writer {
 
 impl Writer {
     pub fn open(path: impl AsRef<Path>, metadata: Metadata) -> Result<Self> {
-        register_cksumvfs_once().context("register cksumvfs")?;
+        init::register_cksumvfs_once().context("register cksumvfs")?;
         let conn = Connection::open(path).context("open file")?;
-        set_reserve_bytes(&conn).context("set reserve bytes")?;
-        run_vacuum(&conn)?;
-        set_synchronous(&conn)?;
-        enable_foreign_keys(&conn)?;
-        ensure_checksum_enabled(&conn)?;
-        let new = check_or_write_version_return_new(&conn)?;
-        init_schema(&conn)?;
-        check_or_write_metadata(&conn, metadata, new)?;
+        init::set_reserve_bytes(&conn).context("set reserve bytes")?;
+        init::run_vacuum(&conn)?;
+        init::set_synchronous(&conn)?;
+        init::enable_foreign_keys(&conn)?;
+        init::ensure_checksum_enabled(&conn)?;
+        let new = init::check_or_write_version_return_new(&conn)?;
+        init::init_schema(&conn)?;
+        init::check_or_write_metadata(&conn, metadata, new)?;
         Ok(Self { conn })
     }
 
