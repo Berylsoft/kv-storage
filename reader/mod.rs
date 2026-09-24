@@ -81,4 +81,60 @@ impl Reader {
     
         Ok(key)
     }
+
+    pub fn iter_range<F>(
+        &mut self,
+        domain_id: u32,
+        key_min: &[u8],
+        key_max: &[u8],
+        mut f: F,
+    ) -> Result<()>
+    where
+        F: FnMut(Box<[u8]>, Box<[u8]>),
+    {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT key, value
+            FROM storage
+            WHERE domain_id = ?1
+            AND key >= ?2
+            AND key <= ?3
+            ORDER BY key ASC",
+        ).context("iter_range: prepare")?;
+
+        let mut rows = stmt.query(params![domain_id, key_min, key_max])
+            .context("iter_range: query")?;
+
+        while let Some(row) = rows.next().context("iter_range: next row")? {
+            let key = row.get(0).context("iter_range: next key")?;
+            let value = row.get(1).context("iter_range: next value")?;
+            // return result?
+            f(key, value);
+        }
+
+        Ok(())
+    }
+
+    pub fn iter<F>(&mut self, domain_id: u32, mut f: F) -> Result<()>
+    where
+        F: FnMut(Box<[u8]>, Box<[u8]>),
+    {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT key, value
+            FROM storage
+            WHERE domain_id = ?1
+            ORDER BY key ASC",
+        ).context("iter: prepare")?;
+
+        let mut rows = stmt.query(params![domain_id])
+            .context("iter: query")?;
+
+        while let Some(row) = rows.next().context("iter: next row")? {
+            let key = row.get(0).context("iter: next key")?;
+            let value = row.get(1).context("iter: next value")?;
+            // return result?
+            f(key, value);
+        }
+
+        Ok(())
+    }
 }

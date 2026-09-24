@@ -27,4 +27,9 @@ fn main() {
     );
     ctx.write_domain(2, b"domain2").unwrap();
     ctx.write_kv(2, b"1", b"value1").unwrap();
+
+    ctx.write_domain(3, b"batch_test").unwrap();
+    for i in 0..1000u32 {
+        ctx.write_kv(3, i.to_be_bytes().as_ref(), (i + 1).to_be_bytes().as_ref()).unwrap();
+    }
 }
