@@ -28,12 +28,20 @@ impl Writer {
     pub fn write_domain(&mut self, domain_id: u32, domain: &[u8]) -> Result<()> {
         let tr = self.conn.transaction().context("write domain: begin transaction")?;
 
-        let domain_exists: bool = tr.query_one(
+        let domain_id_exists: bool = tr.query_one(
             "SELECT EXISTS (SELECT 1 FROM domains WHERE domain_id = ?)",
             params![domain_id], |r| r.get(0),
-        ).context("write domain: check if domain exists")?;
-        if domain_exists {
-            return Err(Error::DuplicateDomain);
+        ).context("write domain: check if domain id exists")?;
+        if domain_id_exists {
+            return Err(Error::DuplicateDomainId);
+        }
+
+        let domain_name_exists: bool = tr.query_one(
+            "SELECT EXISTS (SELECT 1 FROM domains WHERE domain = ?)",
+            params![domain], |r| r.get(0),
+        ).context("write domain: check if domain name exists")?;
+        if domain_name_exists {
+            return Err(Error::DuplicateDomainName);
         }
 
         let updated_rows = tr.execute(
@@ -56,7 +64,7 @@ impl Writer {
             params![domain_id], |r| r.get(0),
         ).context("write kv: check if domain exists")?;
         if !domain_exists {
-            return Err(Error::UnknownDomain);
+            return Err(Error::UnknownDomainId);
         }
 
         let key_exists: bool = tr.query_one(

@@ -23,7 +23,8 @@ const METADATA_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS metadata (
 
 const DOMAINS_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS domains (
     domain_id INTEGER NOT NULL PRIMARY KEY,
-    domain BLOB NOT NULL
+    domain BLOB NOT NULL,
+    UNIQUE (domain)
 ) WITHOUT ROWID;";
 
 const STORAGE_SCHEMA: &str = "CREATE TABLE IF NOT EXISTS storage (

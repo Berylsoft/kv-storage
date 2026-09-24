@@ -31,7 +31,7 @@ fn main() {
         domain_1.write_kv(b(b"2"), b(b"value2")).await.unwrap();
         assert_matches!(
             spawn_domain_unwrap_err(handle.spawn_domain(1, b(b"domain")).await),
-            Error::DuplicateDomain,
+            Error::DuplicateDomainId,
         );
         assert_matches!(
             domain_1.write_kv(b(b"1"), b(b"value3")).await.unwrap_err(),

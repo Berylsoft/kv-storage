@@ -11,7 +11,7 @@ fn main() {
     ctx.write_kv(1, b"2", b"value2").unwrap();
     assert_matches!(
         ctx.write_domain(1, b"domain1").unwrap_err(),
-        Error::DuplicateDomain,
+        Error::DuplicateDomainId,
     );
     assert_matches!(
         ctx.write_kv(1, b"1", b"value3").unwrap_err(),
@@ -19,6 +19,10 @@ fn main() {
     );
     assert_matches!(
         ctx.write_kv(2, b"key", b"value").unwrap_err(),
-        Error::UnknownDomain,
+        Error::UnknownDomainId,
     );
+    assert_matches!(
+        ctx.write_domain(2, b"domain").unwrap_err(),
+        Error::DuplicateDomainName,
+    )
 }
