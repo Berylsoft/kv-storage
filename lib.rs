@@ -45,3 +45,5 @@ pub mod error;
 pub(crate) mod init;
 
 pub mod writer;
+
+pub mod reader;

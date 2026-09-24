@@ -154,6 +154,24 @@ pub fn check_or_write_version(conn: &Connection) -> Result<()> {
     }
 }
 
+pub fn check_version(conn: &Connection) -> Result<()> {
+    let magic: i32 = query_one_row(conn, "PRAGMA application_id;").context("get magic")?;
+    let version: u32 = query_one_row(conn, "PRAGMA user_version;").context("get version")?;
+    let database_is_new = check_if_database_is_new(conn)?;
+    match (database_is_new, magic, version) {
+        (false, MAGIC, VERSION) => {
+            Ok(())
+        }
+        (false, MAGIC, cur_version) => {
+            Err(Error::VersionNotMatch { exp: VERSION, cur: cur_version })
+        }
+        _ => {
+            // including empty database
+            Err(Error::NotABeKVDatabase)
+        }
+    }
+}
+
 pub fn init_schema(conn: &Connection) -> Result<()> {
     run_and_check_update_rows(
         conn,
@@ -182,6 +200,7 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata) -> Result<
     }).context("check metadata: query")?;
     match metadata_iter.next() {
         None => {
+            // TODO: what if a not-new database has 0 row in metadata table?
             let updated_rows = conn.execute(
                 "INSERT INTO metadata (id, ident) VALUES (?, ?)",
                 params![0, metadata.ident],
@@ -204,4 +223,26 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata) -> Result<
         return Err(Error::Invariant("more than 1 rows in metadata table"));
     }
     Ok(())
+}
+
+pub fn read_metadata(conn: &Connection) -> Result<Metadata> {
+    let mut stmt = conn.prepare("SELECT * FROM metadata")
+        .context("read metadata: prepare")?;
+    let mut metadata_iter = stmt.query_map([], |row| {
+        Ok(Metadata {
+            ident: row.get(1)?,
+        })
+    }).context("read metadata: query")?;
+    let res = match metadata_iter.next() {
+        None => {
+            return Err(Error::Invariant("0 row in metadata table when read metadata"));
+        }
+        Some(cur) => {
+            cur.context("read metadata: get")?
+        }
+    };
+    if metadata_iter.next().is_some() {
+        return Err(Error::Invariant("more than 1 rows in metadata table"));
+    }
+    Ok(res)
 }
