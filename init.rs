@@ -125,7 +125,7 @@ fn check_if_database_is_new(conn: &Connection) -> Result<bool> {
     Ok(count == 0)
 }
 
-pub fn check_or_write_version(conn: &Connection) -> Result<()> {
+pub fn check_or_write_version_return_new(conn: &Connection) -> Result<bool> {
     let magic: i32 = query_one_row(conn, "PRAGMA application_id;").context("get magic")?;
     let version: u32 = query_one_row(conn, "PRAGMA user_version;").context("get version")?;
     let database_is_new = check_if_database_is_new(conn)?;
@@ -140,10 +140,11 @@ pub fn check_or_write_version(conn: &Connection) -> Result<()> {
                 conn,
                 SET_VERSION_STMT,
                 "set version",
-            )
+            )?;
+            Ok(true)
         }
         (false, MAGIC, VERSION) => {
-            Ok(())
+            Ok(false)
         }
         (false, MAGIC, cur_version) => {
             Err(Error::VersionNotMatch { exp: VERSION, cur: cur_version })
@@ -190,7 +191,7 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
     )
 }
 
-pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata) -> Result<()> {
+pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool) -> Result<()> {
     let mut stmt = conn.prepare("SELECT * FROM metadata")
         .context("check metadata: prepare")?;
     let mut metadata_iter = stmt.query_map([], |row| {
@@ -200,13 +201,16 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata) -> Result<
     }).context("check metadata: query")?;
     match metadata_iter.next() {
         None => {
-            // TODO: what if a not-new database has 0 row in metadata table?
-            let updated_rows = conn.execute(
-                "INSERT INTO metadata (id, ident) VALUES (?, ?)",
-                params![0, metadata.ident],
-            ).context("write metadata")?;
-            if updated_rows != 1 {
-                return Err(Error::Invariant("write metadata updated_rows not 1"));
+            if new {
+                let updated_rows = conn.execute(
+                    "INSERT INTO metadata (id, ident) VALUES (?, ?)",
+                    params![0, metadata.ident],
+                ).context("write metadata")?;
+                if updated_rows != 1 {
+                    return Err(Error::Invariant("write metadata updated_rows not 1"));
+                }
+            } else {
+                return Err(Error::Invariant("not-new database has no metadata"));
             }
         }
         Some(cur) => {

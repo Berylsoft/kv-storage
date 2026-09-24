@@ -19,9 +19,9 @@ impl Writer {
         set_synchronous(&conn)?;
         enable_foreign_keys(&conn)?;
         ensure_checksum_enabled(&conn)?;
-        check_or_write_version(&conn)?;
+        let new = check_or_write_version_return_new(&conn)?;
         init_schema(&conn)?;
-        check_or_write_metadata(&conn, metadata)?;
+        check_or_write_metadata(&conn, metadata, new)?;
         Ok(Self { conn })
     }
 
