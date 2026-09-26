@@ -27,7 +27,7 @@ impl Reader {
     }
 
     pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Box<[u8]>> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT domain FROM domains WHERE domain_id = ?",
         ).context("get_domain_name_by_id: prepare")?;
 
@@ -40,7 +40,7 @@ impl Reader {
     }
 
     pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<u32> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT domain_id FROM domains WHERE domain = ?",
         ).context("get_domain_id_by_name: prepare")?;
 
@@ -53,7 +53,7 @@ impl Reader {
     }
 
     pub fn get_value_by_key(&mut self, domain_id: u32, key: &[u8]) -> Result<Box<[u8]>> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT value FROM storage WHERE domain_id = ? AND key = ?",
         ).context("get_value_by_key: prepare")?;
 
@@ -66,7 +66,7 @@ impl Reader {
     }
 
     pub fn get_key_by_value(&mut self, domain_id: u32, value: &[u8]) -> Result<Box<[u8]>> {
-        let mut stmt = self.conn.prepare(
+        let mut stmt = self.conn.prepare_cached(
             "SELECT key FROM storage WHERE domain_id = ? AND value = ?",
         ).context("get_key_by_value: prepare")?;
 
