@@ -30,3 +30,7 @@ name = "simple"
 [[example]]
 name = "actor"
 required-features = ["actor-domain-handle"]
+
+[[example]]
+name = "reader"
+required-features = ["reader"]
