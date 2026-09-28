@@ -49,3 +49,6 @@ pub mod writer;
 
 #[cfg(feature = "reader")]
 pub mod reader;
+
+#[cfg(feature = "domain-map")]
+pub mod domain_map;

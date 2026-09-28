@@ -3,7 +3,7 @@ use rusqlite::{Connection, params};
 use crate::{Metadata, error::{Result, ErrorContext}, init};
 
 pub struct Reader {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Reader {

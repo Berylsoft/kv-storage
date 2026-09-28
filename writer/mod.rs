@@ -3,7 +3,7 @@ use rusqlite::{Connection, params};
 use crate::{Metadata, error::{Error, Result, ErrorContext}, init};
 
 pub struct Writer {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Writer {
