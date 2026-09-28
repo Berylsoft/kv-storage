@@ -19,6 +19,7 @@ actor = { git = "https://github.com/Berylsoft/actor", optional = true, features 
 [features]
 actor = ["bytes", "actor-core"]
 actor-domain-handle = ["actor", "dep:actor"]
+reader = []
 
 [dev-dependencies]
 async-global-executor = "3"

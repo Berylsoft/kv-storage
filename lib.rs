@@ -47,4 +47,5 @@ pub(crate) mod init;
 
 pub mod writer;
 
+#[cfg(feature = "reader")]
 pub mod reader;
