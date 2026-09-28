@@ -19,6 +19,10 @@ impl WriteHandle {
             domain,
         })
     }
+
+    pub async fn wait_close(self) -> Result<()> {
+        self.tx.wait_close().await
+    }
 }
 
 impl DomainWriteHandle {
