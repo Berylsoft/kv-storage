@@ -212,7 +212,7 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool)
         }
         Some(row) => {
             let cur = Metadata {
-                ident: row.get(0).context("check metadata: get ident")?,
+                ident: row.get(1).context("check metadata: get ident")?,
             };
             if metadata.ident != cur.ident {
                 return Err(Error::IdentNotMatch {
@@ -239,7 +239,7 @@ pub fn read_metadata(conn: &Connection) -> Result<Metadata> {
         }
         Some(row) => {
             Metadata {
-                ident: row.get(0).context("read metadata: get ident")?,
+                ident: row.get(1).context("read metadata: get ident")?,
             }
         }
     };
