@@ -195,12 +195,8 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
 pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool) -> Result<()> {
     let mut stmt = conn.prepare("SELECT * FROM metadata")
         .context("check metadata: prepare")?;
-    let mut metadata_iter = stmt.query_map([], |row| {
-        Ok(Metadata {
-            ident: row.get(1)?,
-        })
-    }).context("check metadata: query")?;
-    match metadata_iter.next() {
+    let mut rows = stmt.query([]).context("check metadata: query")?;
+    match rows.next().context("check metadata: first row")? {
         None => {
             if new {
                 let updated_rows = conn.execute(
@@ -214,8 +210,10 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool)
                 return Err(Error::Invariant("not-new database has no metadata"));
             }
         }
-        Some(cur) => {
-            let cur = cur.context("check metadata: get")?;
+        Some(row) => {
+            let cur = Metadata {
+                ident: row.get(0).context("check metadata: get ident")?,
+            };
             if metadata.ident != cur.ident {
                 return Err(Error::IdentNotMatch {
                     exp: metadata.ident,
@@ -224,7 +222,7 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool)
             }
         }
     }
-    if metadata_iter.next().is_some() {
+    if rows.next().context("check metadata: second row")?.is_some() {
         return Err(Error::Invariant("more than 1 rows in metadata table"));
     }
     Ok(())
@@ -234,20 +232,18 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool)
 pub fn read_metadata(conn: &Connection) -> Result<Metadata> {
     let mut stmt = conn.prepare("SELECT * FROM metadata")
         .context("read metadata: prepare")?;
-    let mut metadata_iter = stmt.query_map([], |row| {
-        Ok(Metadata {
-            ident: row.get(1)?,
-        })
-    }).context("read metadata: query")?;
-    let res = match metadata_iter.next() {
+    let mut rows = stmt.query([]).context("read metadata: query")?;
+    let res = match rows.next().context("read metadata: first row")? {
         None => {
             return Err(Error::Invariant("0 row in metadata table when read metadata"));
         }
-        Some(cur) => {
-            cur.context("read metadata: get")?
+        Some(row) => {
+            Metadata {
+                ident: row.get(0).context("read metadata: get ident")?,
+            }
         }
     };
-    if metadata_iter.next().is_some() {
+    if rows.next().context("read metadata: second row")?.is_some() {
         return Err(Error::Invariant("more than 1 rows in metadata table"));
     }
     Ok(res)
