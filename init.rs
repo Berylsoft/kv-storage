@@ -155,6 +155,7 @@ pub fn check_or_write_version_return_new(conn: &Connection) -> Result<bool> {
     }
 }
 
+#[cfg(feature = "reader")]
 pub fn check_version(conn: &Connection) -> Result<()> {
     let magic: i32 = query_one_row(conn, "PRAGMA application_id;").context("get magic")?;
     let version: u32 = query_one_row(conn, "PRAGMA user_version;").context("get version")?;
@@ -229,6 +230,7 @@ pub fn check_or_write_metadata(conn: &Connection, metadata: Metadata, new: bool)
     Ok(())
 }
 
+#[cfg(feature = "reader")]
 pub fn read_metadata(conn: &Connection) -> Result<Metadata> {
     let mut stmt = conn.prepare("SELECT * FROM metadata")
         .context("read metadata: prepare")?;
