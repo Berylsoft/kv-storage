@@ -6,7 +6,7 @@ use crate::reader::Reader;
 
 pub fn build_domain_map<T, F>(conn: &mut Connection, mut f: F) -> Result<BTreeMap<u32, T>>
 where
-    F: FnMut(Box<[u8]>) -> T
+    F: FnMut(Box<[u8]>) -> T,
 {
     let mut stmt = conn.prepare("SELECT * FROM domains")
         .context("build_domain_map: prepare")?;
@@ -27,7 +27,7 @@ where
 impl Writer {
     pub fn build_domain_map<T, F>(&mut self, f: F) -> Result<BTreeMap<u32, T>>
     where
-        F: FnMut(Box<[u8]>) -> T
+        F: FnMut(Box<[u8]>) -> T,
     {
         build_domain_map(&mut self.conn, f)
     }
@@ -37,7 +37,7 @@ impl Writer {
 impl Reader {
     pub fn build_domain_map<T, F>(&mut self, f: F) -> Result<BTreeMap<u32, T>>
     where
-        F: FnMut(Box<[u8]>) -> T
+        F: FnMut(Box<[u8]>) -> T,
     {
         build_domain_map(&mut self.conn, f)
     }
