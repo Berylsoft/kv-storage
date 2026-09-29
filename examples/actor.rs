@@ -2,8 +2,7 @@ use std::assert_matches;
 use kv_storage::{
     Metadata,
     error::{Error, Result},
-    writer::actor::{WriterContextConfig},
-    writer::actor_domain_handle::{create, DomainWriteHandle},
+    actor::{WriterContextConfig, domain_handle::{create, DomainWriteHandle}},
 };
 
 fn b(bytes: &'static [u8]) -> bytes::Bytes {

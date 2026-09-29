@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 use bytes::Bytes;
 use actor_core::*;
-use super::*;
+use crate::{
+    Metadata,
+    error::{Error, Result},
+    writer::*,
+};
 
 #[derive(Clone)]
 pub struct Domain {
@@ -67,3 +71,6 @@ impl SyncInitContext for WriterContext {
         Ok(WriterContext { writer })
     }
 }
+
+#[cfg(feature = "actor-domain-handle")]
+pub mod domain_handle;

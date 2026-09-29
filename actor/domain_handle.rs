@@ -1,5 +1,6 @@
 use bytes::Bytes;
-use crate::{error::Result, writer::actor::*};
+use crate::error::Result;
+use super::*;
 
 pub struct WriteHandle {
     tx: actor::Handle<WriterContext>,

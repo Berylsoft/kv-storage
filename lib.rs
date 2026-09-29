@@ -52,3 +52,6 @@ pub mod reader;
 
 #[cfg(feature = "domain-map")]
 pub mod domain_map;
+
+#[cfg(feature = "actor")]
+pub mod actor;
