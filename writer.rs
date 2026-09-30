@@ -59,6 +59,25 @@ impl Writer {
         Ok(domain_id)
     }
 
+    pub fn get_max_domain_id(&mut self) -> Result<u32> {
+        let tr = self.conn.transaction()
+            .context("get_max_domain_id: begin transaction")?;
+
+        let mut stmt = tr.prepare_cached(
+            "SELECT MAX(domain_id) FROM domains",
+        ).context("get_max_domain_id: prepare")?;
+
+        let domain_id = stmt.query_one(
+            [],
+            |r| r.get(0),
+        ).context("get_max_domain_id: get")?;
+
+        drop(stmt);
+
+        tr.commit().context("get_max_domain_id: commit")?;
+        Ok(domain_id)
+    }
+
     pub fn write_domain(&mut self, domain_id: u32, domain: &[u8]) -> Result<()> {
         let tr = self.conn.transaction()
             .context("write domain: begin transaction")?;

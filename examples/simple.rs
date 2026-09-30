@@ -32,4 +32,6 @@ fn main() {
     for i in 0..1000u32 {
         ctx.write_kv(3, i.to_be_bytes().as_ref(), (i + 1).to_be_bytes().as_ref()).unwrap();
     }
+
+    dbg!(ctx.get_max_domain_id().unwrap());
 }
