@@ -35,7 +35,7 @@ impl Reader {
             params![domain_id],
             |r| r.get(0),
         ).context("get_domain_name_by_id: get")?;
-    
+
         Ok(domain_name)
     }
 
@@ -48,7 +48,7 @@ impl Reader {
             params![domain],
             |r| r.get(0),
         ).context("get_domain_id_by_name: get")?;
-    
+
         Ok(domain_id)
     }
 

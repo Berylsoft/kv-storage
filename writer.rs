@@ -21,8 +21,47 @@ impl Writer {
         Ok(Self { conn })
     }
 
+    pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Box<[u8]>> {
+        let tr = self.conn.transaction()
+            .context("get_domain_name_by_id in write: begin transaction")?;
+
+        let mut stmt = tr.prepare_cached(
+            "SELECT domain FROM domains WHERE domain_id = ?",
+        ).context("get_domain_name_by_id in write: prepare")?;
+
+        let domain_name = stmt.query_one(
+            params![domain_id],
+            |r| r.get(0),
+        ).context("get_domain_name_by_id in write: get")?;
+
+        drop(stmt);
+
+        tr.commit().context("get_domain_name_by_id in write: commit")?;
+        Ok(domain_name)
+    }
+
+    pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<u32> {
+        let tr = self.conn.transaction()
+            .context("get_domain_id_by_name in write: begin transaction")?;
+
+        let mut stmt = tr.prepare_cached(
+            "SELECT domain_id FROM domains WHERE domain = ?",
+        ).context("get_domain_id_by_name in write: prepare")?;
+
+        let domain_id = stmt.query_one(
+            params![domain],
+            |r| r.get(0),
+        ).context("get_domain_id_by_name in write: get")?;
+
+        drop(stmt);
+
+        tr.commit().context("get_domain_id_by_name in write: commit")?;
+        Ok(domain_id)
+    }
+
     pub fn write_domain(&mut self, domain_id: u32, domain: &[u8]) -> Result<()> {
-        let tr = self.conn.transaction().context("write domain: begin transaction")?;
+        let tr = self.conn.transaction()
+            .context("write domain: begin transaction")?;
 
         let domain_id_exists: bool = tr.query_one(
             "SELECT EXISTS (SELECT 1 FROM domains WHERE domain_id = ?)",
@@ -53,7 +92,8 @@ impl Writer {
     }
 
     pub fn write_kv(&mut self, domain_id: u32, key: &[u8], value: &[u8]) -> Result<()> {
-        let tr = self.conn.transaction().context("write kv: begin transaction")?;
+        let tr = self.conn.transaction()
+            .context("write kv: begin transaction")?;
 
         let domain_exists: bool = tr.query_one(
             "SELECT EXISTS (SELECT 1 FROM domains WHERE domain_id = ?)",
