@@ -33,5 +33,15 @@ fn main() {
         ctx.write_kv(3, i.to_be_bytes().as_ref(), (i + 1).to_be_bytes().as_ref()).unwrap();
     }
 
-    dbg!(ctx.get_max_domain_id().unwrap());
+    assert_eq!(ctx.get_max_domain_id().unwrap(), 3);
+    assert_eq!(
+        ctx.get_domain_name_by_id(3).unwrap().unwrap().as_ref(),
+        b"batch_test",
+    );
+    assert_eq!(
+        ctx.get_domain_id_by_name(b"domain2").unwrap().unwrap(),
+        2,
+    );
+    assert!(ctx.get_domain_name_by_id(999).unwrap().is_none());
+    assert!(ctx.get_domain_id_by_name(b"not exists").unwrap().is_none());
 }

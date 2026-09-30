@@ -21,7 +21,7 @@ impl Writer {
         Ok(Self { conn })
     }
 
-    pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Box<[u8]>> {
+    pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Option<Box<[u8]>>> {
         let tr = self.conn.transaction()
             .context("get_domain_name_by_id in write: begin transaction")?;
 
@@ -29,10 +29,20 @@ impl Writer {
             "SELECT domain FROM domains WHERE domain_id = ?",
         ).context("get_domain_name_by_id in write: prepare")?;
 
-        let domain_name = stmt.query_one(
+        let mut rows = stmt.query(
             params![domain_id],
-            |r| r.get(0),
-        ).context("get_domain_name_by_id in write: get")?;
+        ).context("get_domain_name_by_id in write: query")?;
+
+        let domain_name = match rows.next().context("get_domain_name_by_id in write: first row")? {
+            None => None,
+            Some(row) => Some(row.get(0).context("get_domain_name_by_id in write: get domain name")?)
+        };
+
+        if rows.next().context("get_domain_name_by_id in write: second row")?.is_some() {
+            return Err(Error::Invariant("more than 1 rows in get_domain_name_by_id result"));
+        }
+
+        drop(rows);
 
         drop(stmt);
 
@@ -40,7 +50,7 @@ impl Writer {
         Ok(domain_name)
     }
 
-    pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<u32> {
+    pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<Option<u32>> {
         let tr = self.conn.transaction()
             .context("get_domain_id_by_name in write: begin transaction")?;
 
@@ -48,10 +58,20 @@ impl Writer {
             "SELECT domain_id FROM domains WHERE domain = ?",
         ).context("get_domain_id_by_name in write: prepare")?;
 
-        let domain_id = stmt.query_one(
+        let mut rows = stmt.query(
             params![domain],
-            |r| r.get(0),
-        ).context("get_domain_id_by_name in write: get")?;
+        ).context("get_domain_id_by_name in write: query")?;
+
+        let domain_id = match rows.next().context("get_domain_id_by_name in write: first row")? {
+            None => None,
+            Some(row) => Some(row.get(0).context("get_domain_id_by_name in write: get domain name")?)
+        };
+
+        if rows.next().context("get_domain_id_by_name in write: second row")?.is_some() {
+            return Err(Error::Invariant("more than 1 rows in get_domain_id_by_name result"));
+        }
+
+        drop(rows);
 
         drop(stmt);
 

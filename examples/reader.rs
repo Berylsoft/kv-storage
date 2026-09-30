@@ -5,13 +5,15 @@ fn main() {
     assert_eq!(metadata.ident.as_ref(), b"test");
 
     assert_eq!(
-        ctx.get_domain_name_by_id(1).unwrap().as_ref(),
+        ctx.get_domain_name_by_id(1).unwrap().unwrap().as_ref(),
         b"domain",
     );
     assert_eq!(
-        ctx.get_domain_id_by_name(b"domain").unwrap(),
+        ctx.get_domain_id_by_name(b"domain").unwrap().unwrap(),
         1,
     );
+    ctx.get_domain_name_by_id(999).unwrap();
+    ctx.get_domain_id_by_name(b"not exists").unwrap();
     assert_eq!(
         ctx.get_value_by_key(1, b"1").unwrap().as_ref(),
         b"value1",

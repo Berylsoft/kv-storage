@@ -1,6 +1,6 @@
 use std::path::Path;
 use rusqlite::{Connection, params};
-use crate::{Metadata, error::{Result, ErrorContext}, init};
+use crate::{Metadata, error::{Error, Result, ErrorContext}, init};
 
 pub struct Reader {
     pub(crate) conn: Connection,
@@ -26,28 +26,44 @@ impl Reader {
         Ok((Reader { conn }, metadata))
     }
 
-    pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Box<[u8]>> {
+    pub fn get_domain_name_by_id(&mut self, domain_id: u32) -> Result<Option<Box<[u8]>>> {
         let mut stmt = self.conn.prepare_cached(
             "SELECT domain FROM domains WHERE domain_id = ?",
         ).context("get_domain_name_by_id: prepare")?;
 
-        let domain_name = stmt.query_one(
+        let mut rows = stmt.query(
             params![domain_id],
-            |r| r.get(0),
-        ).context("get_domain_name_by_id: get")?;
+        ).context("get_domain_name_by_id: query")?;
+
+        let domain_name = match rows.next().context("get_domain_name_by_id: first row")? {
+            None => None,
+            Some(row) => Some(row.get(0).context("get_domain_name_by_id: get domain name")?)
+        };
+
+        if rows.next().context("get_domain_name_by_id: second row")?.is_some() {
+            return Err(Error::Invariant("more than 1 rows in get_domain_name_by_id result"));
+        }
 
         Ok(domain_name)
     }
 
-    pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<u32> {
+    pub fn get_domain_id_by_name(&mut self, domain: &[u8]) -> Result<Option<u32>> {
         let mut stmt = self.conn.prepare_cached(
             "SELECT domain_id FROM domains WHERE domain = ?",
         ).context("get_domain_id_by_name: prepare")?;
 
-        let domain_id = stmt.query_one(
+        let mut rows = stmt.query(
             params![domain],
-            |r| r.get(0),
-        ).context("get_domain_id_by_name: get")?;
+        ).context("get_domain_id_by_name: query")?;
+
+        let domain_id = match rows.next().context("get_domain_id_by_name: first row")? {
+            None => None,
+            Some(row) => Some(row.get(0).context("get_domain_id_by_name: get domain name")?)
+        };
+
+        if rows.next().context("get_domain_id_by_name: second row")?.is_some() {
+            return Err(Error::Invariant("more than 1 rows in get_domain_id_by_name result"));
+        }
 
         Ok(domain_id)
     }
