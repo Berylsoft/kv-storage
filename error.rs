@@ -14,6 +14,8 @@ pub enum Error {
     IdentNotMatch { exp: Box<[u8]>, cur: Box<[u8]> },
     #[cfg(feature = "actor")]
     ActorClosed,
+    #[cfg(feature = "auto-domain-id")]
+    DomainIdExhausted,
 }
 
 pub(crate) trait ErrorContext<T> {

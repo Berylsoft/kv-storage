@@ -36,7 +36,8 @@ impl SyncContext for WriterContext {
             Request::Domain(domain) => {
                 let domain_id = match self.writer.get_domain_id_by_name(&domain)? {
                     Some(domain_id) => domain_id,
-                    None => self.writer.get_max_domain_id()?,
+                    None => self.writer.get_max_domain_id()?
+                        .checked_add(1).ok_or_else(|| Error::DomainIdExhausted)?,
                 };
                 self.writer.write_domain(domain_id, &domain)?;
                 Response::Domain(domain_id)
