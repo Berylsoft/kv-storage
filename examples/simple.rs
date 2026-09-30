@@ -32,6 +32,4 @@ fn main() {
     for i in 0..1000u32 {
         ctx.write_kv(3, i.to_be_bytes().as_ref(), (i + 1).to_be_bytes().as_ref()).unwrap();
     }
-
-    dbg!(ctx.build_domain_map(|name| String::from_utf8(name.into_vec()).unwrap()).unwrap());
 }

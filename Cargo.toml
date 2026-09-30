@@ -18,7 +18,6 @@ actor = { git = "https://github.com/Berylsoft/actor", optional = true, features 
 
 [features]
 reader = []
-domain-map = []
 actor = ["bytes", "actor-core"]
 actor-domain-handle = ["actor", "dep:actor"]
 
