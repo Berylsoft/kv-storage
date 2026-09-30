@@ -20,6 +20,7 @@ actor = { git = "https://github.com/Berylsoft/actor", optional = true, features 
 reader = []
 actor = ["bytes", "actor-core"]
 actor-domain-handle = ["actor", "dep:actor"]
+auto-domain-id = ["actor-domain-handle"]
 
 [dev-dependencies]
 async-global-executor = "3"

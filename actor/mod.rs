@@ -70,3 +70,6 @@ impl SyncInitContext for WriterContext {
 
 #[cfg(feature = "actor-domain-handle")]
 pub mod domain_handle;
+
+#[cfg(feature = "auto-domain-id")]
+pub mod auto_domain_id;
