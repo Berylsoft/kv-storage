@@ -1,11 +1,7 @@
 use std::path::PathBuf;
 use bytes::Bytes;
 use actor_core::*;
-use crate::{
-    Metadata,
-    error::{Error, Result},
-    writer::*,
-};
+use crate::{Metadata, error::{Error, Result}, writer::*};
 
 #[derive(Clone)]
 pub struct Domain {
