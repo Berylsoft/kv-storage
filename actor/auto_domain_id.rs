@@ -1,9 +1,7 @@
-
-use std::path::PathBuf;
 use bytes::Bytes;
 use actor_core::*;
-use crate::{Metadata, error::{Error, Result}, writer::*};
-use super::{Domain, KV};
+use crate::{error::{Error, Result}, writer::*};
+use super::{Domain, KV, WriterContextConfig};
 
 pub enum Request {
     Domain(Bytes),
@@ -13,11 +11,6 @@ pub enum Request {
 pub enum Response {
     Domain(u32),
     KV,
-}
-
-pub struct WriterContextConfig {
-    pub path: PathBuf,
-    pub metadata: Metadata,
 }
 
 pub struct WriterContext {
