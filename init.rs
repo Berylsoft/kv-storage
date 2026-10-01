@@ -105,7 +105,7 @@ pub fn enable_foreign_keys(conn: &Connection) -> Result<()> {
 }
 
 fn query_one_row<T: FromSql>(conn: &Connection, stmt: &str) -> rusqlite::Result<T> {
-    conn.query_one(stmt, [], |r| r.get::<_, T>(0))
+    conn.query_one(stmt, [], |r| r.get(0))
 }
 
 pub fn ensure_checksum_enabled(conn: &Connection) -> Result<()> {
